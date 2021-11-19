@@ -9,5 +9,5 @@ class Temperature:
     def to_dictionary(self):
         return {
             "temperature": self.temperature,
-            "time": self.time
+            "date_time": self.time
         }

@@ -9,5 +9,5 @@ class Humidity:
     def to_dictionary(self):
         return {
             "humidity": self.humidity,
-            "time": self.time
+            "date_time": self.time
         }

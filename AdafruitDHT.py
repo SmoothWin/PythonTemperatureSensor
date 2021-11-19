@@ -1,4 +1,5 @@
 import json
+import os
 import time
 
 import requests
@@ -14,6 +15,9 @@ from Models.Humidity import Humidity
 from Models.Status import Status
 from Models.Temperature import Temperature
 from cryptography.fernet import Fernet
+from dotenv import load_dotenv
+
+load_dotenv()
 
 SENSOR_PIN = D17
 dht11 = adafruit_dht.DHT11(SENSOR_PIN, use_pulseio=False)
@@ -23,26 +27,9 @@ temperature = DbTemperature()
 status = DbStatus()
 
 
-#
-# def job():
-#     try:
-#         temperature_c = dht11.temperature
-#         time.sleep(2)
-#         humidity = dht11.humidity
-#         time.sleep(2)
-#
-#         print(f"Humidity = {humidity:.2f}%")
-#         print(f"Temperature = {temperature_c:.2f}°C")
-#
-#     except RuntimeError:
-#         print("sucks to be you")
-#
-#
-# schedule.every(10).seconds.do(job)
-#
-# while True:
-#     schedule.run_pending()
-#     time.sleep(1)
+def get_time_now():
+    global my_time
+    my_time = datetime.now()
 
 
 def add_status():
@@ -53,27 +40,28 @@ def add_status():
 
 
 def add_temperature():
-    try:
-        time.sleep(2)
-        temperature_c = dht11.temperature
-    except RuntimeError:
-        print("Error, while reading the temperature")
-        time.sleep(4)
-        temperature_c = dht11.temperature
+    while True:
+        try:
+            time.sleep(2)
+            temperature_c = dht11.temperature
+            break
+        except RuntimeError:
+            print("Error, while reading the temperature")
     temperature_insert = Temperature(temperature_c, my_time)
     insert_temp = temperature.insert_temperature(temperature_insert)
     return insert_temp
 
 
 def add_humidity():
-    try:
-        time.sleep(2)
-        humidity_percent = dht11.humidity
-    except RuntimeError:
-        print("Error, while reading the humidity")
-        time.sleep(4)
-        humidity_percent = dht11.humidity
-    humidity_insert = Humidity(humidity_percent, my_time)
+    while True:
+        try:
+            time.sleep(2)
+            humidity_percent = dht11.humidity
+            break
+        except RuntimeError:
+            print("Error, while reading the humidity")
+
+    humidity_insert = Humidity(humidity_percent / 100, my_time)
     insert_hum = humidity.insert_humidity(humidity_insert)
     return insert_hum
 
@@ -113,11 +101,21 @@ def delete_all_data():
 
 
 def post_into_web_app():
-    key = Fernet.generate_key()
-    f = Fernet(key)
+    f = Fernet(os.environ.get('REQUEST_SECRET'))
     my_data = assemble_json()
-    encrypted_data = f.encrypt(bytes(str(list(my_data.values())), 'ASCII'))
-    header = {"security-check": encrypted_data}
+
+    my_data = json.dumps(my_data, indent=2, default=str)
+    my_data_dict = json.loads(my_data)
+    string = ""
+    for i in my_data_dict.keys():
+        string += str(my_data_dict[i])
+    print(string)
+    print(my_data_dict)
+    print(my_data)
+    encrypted_data = f.encrypt(bytes(string, 'ASCII'))
+    print(encrypted_data.decode("UTF-8"))
+
+    header = {"security-check": encrypted_data.decode("UTF-8"), "Content-type": "application/json"}
     url = "https://pythontemperaturetracker.herokuapp.com/api/send"
 
     x = requests.post(url, data=my_data, headers=header)
@@ -126,16 +124,37 @@ def post_into_web_app():
 
 def assemble_json():
     all_temperatures = select_all_temperatures()
+    for t in all_temperatures:
+        t.pop("ID")
     all_humidities = select_all_humidities()
+    for h in all_humidities:
+        h.pop("ID")
     all_statuses = select_all_statuses()
-    all_data = {"humidities": all_humidities, "status": all_statuses, "temperatures": all_temperatures}
+    for s in all_statuses:
+        s.pop("ID")
+        s["online"] = bool(s.get("online"))
+    all_data = {"temperature": all_temperatures, "humidity": all_humidities, "status": all_statuses}
+
     return all_data
 
 
-delete_all_data()
+def job():
+    get_time_now()
+    add_humidity()
+    add_status()
+    add_temperature()
 
-add_humidity()
-add_status()
-add_temperature()
-results = post_into_web_app()
-print(json.dumps(results.text, indent=2, default=str))
+
+def send_web_app_data():
+    if check_status():
+        post_into_web_app()
+        delete_all_data()
+
+
+schedule.every(5).minutes.do(job)
+schedule.every(10).minutes.do(send_web_app_data)
+
+while True:
+    schedule.run_pending()
+    time.sleep(1)
+

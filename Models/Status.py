@@ -8,6 +8,6 @@ class Status:
 
     def to_dictionary(self):
         return {
-            "onlinestatus": self.status,
-            "time": self.time
+            "online": self.status,
+            "date_time": self.time
         }
