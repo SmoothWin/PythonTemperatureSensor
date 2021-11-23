@@ -1,3 +1,5 @@
+#!/home/pi/homeWork/pythonProject2/venv/bin/python
+
 import json
 import os
 import time

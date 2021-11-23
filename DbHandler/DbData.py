@@ -4,7 +4,7 @@ import mysql.connector
 class DBData:
     def __init__(self):
         try:
-            self.config_file = "my.conf"
+            self.config_file = "/home/pi/homeWork/pythonProject2/my.conf"
             self.connex = mysql.connector.connect(option_files=self.config_file)
         except mysql.connector.Error as e:
             print(e)
